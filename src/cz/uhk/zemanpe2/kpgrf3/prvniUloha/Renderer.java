@@ -17,8 +17,16 @@ public class Renderer implements GLEventListener, MouseListener, MouseMotionList
     private int[] vertexBuffer = new int[1];
     private int[] indexBuffer = new int[1];
 
+    private int shaderProgram;
+
     @Override
     public void init(GLAutoDrawable glAutoDrawable) {
+        // check whether shaders are supported
+        String extensions = glAutoDrawable.getGL().glGetString(GL2GL3.GL_EXTENSIONS);
+        if (extensions.indexOf("GL_ARB_vertex_shader") == -1 || extensions.indexOf("GL_ARB_fragment_shader") == -1) {
+            throw new RuntimeException("Shaders not available.");
+        }
+
         GL2GL3 gl = glAutoDrawable.getGL().getGL2GL3();
 
         System.out.println("Init GL is " + gl.getClass().getName());
@@ -30,6 +38,7 @@ public class Renderer implements GLEventListener, MouseListener, MouseMotionList
                 + gl.glGetString(GL2GL3.GL_EXTENSIONS));
 
         createBuffers(gl);
+        createShaders(gl);
 
         // set render mode GL_FILL is default, other possibility GL_LINE or GL_POINT
         gl.glPolygonMode(GL2GL3.GL_FRONT_AND_BACK, GL2GL3.GL_FILL);
@@ -65,6 +74,56 @@ public class Renderer implements GLEventListener, MouseListener, MouseMotionList
                 GL2GL3.GL_STATIC_DRAW);
     }
 
+    private void createShaders(GL2GL3 gl) {
+        String shaderVertSrc[] = {
+                "#version 150\n",
+                "in vec2 inPosition;", // input from the vertex buffer
+                "void main() {",
+                "	vec2 position = inPosition;",
+                "   position.x += 0.1;",
+                " 	gl_Position = vec4(position, 0.0, 1.0);",
+                "}"
+        };
+        // gl_Position - built-in vertex shader output variable containing
+        // vertex position before w-clipping and dehomogenization, must be
+        // filled
+
+        String shaderFragSrc[] = {
+                "#version 150\n",
+                "out vec4 outColor;", // output from the fragment shader
+                "void main() {",
+                " 	outColor = vec4(0.5,0.1,0.8, 1.0);",
+                "}"
+        };
+
+        // vertex shader
+        int vs = gl.glCreateShader(GL2GL3.GL_VERTEX_SHADER);
+        gl.glShaderSource(vs, shaderVertSrc.length, shaderVertSrc,
+                (int[]) null, 0);
+        gl.glCompileShader(vs);
+        System.out.println("Compile VS error: " + checkLogInfo(gl, vs, GL2GL3.GL_COMPILE_STATUS));
+
+        // fragment shader
+        int fs = gl.glCreateShader(GL2GL3.GL_FRAGMENT_SHADER);
+        gl.glShaderSource(fs, shaderFragSrc.length, shaderFragSrc,
+                (int[]) null, 0);
+        gl.glCompileShader(fs);
+        System.out.println("Compile FS error: " + checkLogInfo(gl, fs, GL2GL3.GL_COMPILE_STATUS));
+
+        // link program
+        shaderProgram = gl.glCreateProgram();
+        gl.glAttachShader(shaderProgram, vs);
+        gl.glAttachShader(shaderProgram, fs);
+        gl.glLinkProgram(shaderProgram);
+        System.out.println("Link error: " + checkLogInfo(gl, shaderProgram, GL2GL3.GL_LINK_STATUS));
+
+        if (vs > 0) gl.glDetachShader(shaderProgram, vs);
+        if (fs > 0) gl.glDetachShader(shaderProgram, fs);
+        if (vs > 0) gl.glDeleteShader(vs);
+        if (fs > 0) gl.glDeleteShader(fs);
+
+    }
+
     @Override
     public void display(GLAutoDrawable glDrawable) {
         GL2GL3 gl = glDrawable.getGL().getGL2GL3();
@@ -73,7 +132,7 @@ public class Renderer implements GLEventListener, MouseListener, MouseMotionList
 
         // set the current shader to be used, could have been done only once (in
         // init) in this sample (only one shader used)
-        gl.glUseProgram(0);
+        gl.glUseProgram(shaderProgram);
         // to use the default shader of the "fixed pipeline", call
         // gl.glUseProgram(0);
 
@@ -103,7 +162,9 @@ public class Renderer implements GLEventListener, MouseListener, MouseMotionList
     }
 
     @Override
-    public void dispose(GLAutoDrawable glAutoDrawable) {
+    public void dispose(GLAutoDrawable glDrawable) {
+        GL2GL3 gl = glDrawable.getGL().getGL2GL3();
+        gl.glDeleteProgram(shaderProgram);
     }
 
     @Override
@@ -150,6 +211,52 @@ public class Renderer implements GLEventListener, MouseListener, MouseMotionList
 
     @Override
     public void mouseMoved(MouseEvent e) {
+    }
+
+    static private String checkLogInfo(GL2GL3 gl, int programObject, int mode) {
+        switch (mode) {
+            case GL2GL3.GL_COMPILE_STATUS:
+                return checkLogInfoShader(gl, programObject, mode);
+            case GL2GL3.GL_LINK_STATUS:
+            case GL2GL3.GL_VALIDATE_STATUS:
+                return checkLogInfoProgram(gl, programObject, mode);
+            default:
+                return "Unsupported mode.";
+        }
+    }
+
+    static private String checkLogInfoShader(GL2GL3 gl, int programObject, int mode) {
+        int[] error = new int[] { -1 };
+        gl.glGetShaderiv(programObject, mode, error, 0);
+        if (error[0] != GL2GL3.GL_TRUE) {
+            int[] len = new int[1];
+            gl.glGetShaderiv(programObject, GL2GL3.GL_INFO_LOG_LENGTH, len, 0);
+            if (len[0] == 0) {
+                return null;
+            }
+            byte[] errorMessage = new byte[len[0]];
+            gl.glGetShaderInfoLog(programObject, len[0], len, 0, errorMessage,
+                    0);
+            return new String(errorMessage, 0, len[0]);
+        }
+        return null;
+    }
+
+    static private String checkLogInfoProgram(GL2GL3 gl, int programObject, int mode) {
+        int[] error = new int[] { -1 };
+        gl.glGetProgramiv(programObject, mode, error, 0);
+        if (error[0] != GL2GL3.GL_TRUE) {
+            int[] len = new int[1];
+            gl.glGetProgramiv(programObject, GL2GL3.GL_INFO_LOG_LENGTH, len, 0);
+            if (len[0] == 0) {
+                return null;
+            }
+            byte[] errorMessage = new byte[len[0]];
+            gl.glGetProgramInfoLog(programObject, len[0], len, 0, errorMessage,
+                    0);
+            return new String(errorMessage, 0, len[0]);
+        }
+        return null;
     }
 
 }
