@@ -1,200 +1,151 @@
 package cz.uhk.zemanpe2.kpgrf3.prvniUloha;
 
-import com.jogamp.common.nio.Buffers;
 import com.jogamp.opengl.GL2GL3;
 import com.jogamp.opengl.GLAutoDrawable;
 import com.jogamp.opengl.GLEventListener;
 
-import java.awt.event.*;
-import java.nio.FloatBuffer;
-import java.nio.ShortBuffer;
+import oglutils.OGLBuffers;
+import oglutils.OGLTextRenderer;
+import oglutils.OGLUtils;
+import oglutils.ShaderUtils;
+import transforms.Camera;
+import transforms.Mat4;
+import transforms.Mat4PerspRH;
+import transforms.Vec3D;
 
-public class Renderer implements GLEventListener, MouseListener, MouseMotionListener, KeyListener {
+import java.awt.event.MouseListener;
+import java.awt.event.MouseMotionListener;
+import java.awt.event.MouseEvent;
+import java.awt.event.KeyListener;
+import java.awt.event.KeyEvent;
 
-    private int width;
-    private int height;
+/**
+ * GLSL sample:<br/>
+ * Read and compile shader from files "/shader/glsl01/start.*" using ShaderUtils
+ * class in oglutils package (older GLSL syntax can be seen in
+ * "/shader/glsl01/startForOlderGLSL")<br/>
+ * Manage (create, bind, draw) vertex and index buffers using OGLBuffers class
+ * in oglutils package<br/>
+ * Requires JOGL 2.3.0 or newer
+ *
+ * @author PGRF FIM UHK
+ * @version 2.0
+ * @since 2015-09-05
+ */
+public class Renderer implements GLEventListener, MouseListener,
+        MouseMotionListener, KeyListener {
 
-    private int[] vertexBuffer = new int[1];
-    private int[] indexBuffer = new int[1];
+    int width, height;
 
-    private int shaderProgram;
+    OGLBuffers buffers;
+    OGLTextRenderer textRenderer;
+
+    int shaderProgram, locTime, locProj, locView;
+
+    float time = 0;
+    private Mat4 proj;
+    private Camera camera;
 
     @Override
-    public void init(GLAutoDrawable glAutoDrawable) {
+    public void init(GLAutoDrawable glDrawable) {
         // check whether shaders are supported
-        String extensions = glAutoDrawable.getGL().glGetString(GL2GL3.GL_EXTENSIONS);
-        if (extensions.indexOf("GL_ARB_vertex_shader") == -1 || extensions.indexOf("GL_ARB_fragment_shader") == -1) {
-            throw new RuntimeException("Shaders not available.");
-        }
+        GL2GL3 gl = glDrawable.getGL().getGL2GL3();
+        OGLUtils.shaderCheck(gl);
 
-        GL2GL3 gl = glAutoDrawable.getGL().getGL2GL3();
+        OGLUtils.printOGLparameters(gl);
 
-        System.out.println("Init GL is " + gl.getClass().getName());
-        System.out.println("OpenGL version " + gl.glGetString(GL2GL3.GL_VERSION));
-        System.out.println("OpenGL vendor " + gl.glGetString(GL2GL3.GL_VENDOR));
-        System.out
-                .println("OpenGL renderer " + gl.glGetString(GL2GL3.GL_RENDERER));
-        System.out.println("OpenGL extension "
-                + gl.glGetString(GL2GL3.GL_EXTENSIONS));
+        textRenderer = new OGLTextRenderer(gl, glDrawable.getSurfaceWidth(), glDrawable.getSurfaceHeight());
 
-        createBuffers(gl);
-        createShaders(gl);
+        // shader files are in /shaders/ directory
+        // shaders directory must be set as a source directory of the project
+        // e.g. in Eclipse via main menu Project/Properties/Java Build Path/Source
 
-        // set render mode GL_FILL is default, other possibility GL_LINE or GL_POINT
-        gl.glPolygonMode(GL2GL3.GL_FRONT_AND_BACK, GL2GL3.GL_FILL);
+
+        shaderProgram = ShaderUtils.loadProgram(gl, "/start.vert",
+                "/start.frag",
+                null,null,null,null);
+
+        //shorter version of loading shader program
+        //shaderProgram = ShaderUtils.loadProgram(gl, "/lvl1basic/p01start/p04utils/start");
+
+        //for older GLSL version
+        //shaderProgram = ShaderUtils.loadProgram(gl, "/lvl1basic/p01start/p04utils/startForOlderGLSL");
+
+        //createBuffers(gl);
+
+        buffers = GridRenderer.generateGrid(gl, 4, 3);
+
+        camera = new Camera().withPosition(new Vec3D(0, 0, 0)).addAzimuth(5 / 4. * Math.PI).addZenith(-1 / 5. * Math.PI).withFirstPerson(false).withRadius(5);
+
+        //locTime = gl.glGetUniformLocation(shaderProgram, "time");
+        locProj = gl.glGetUniformLocation(shaderProgram, "proj");
+        locView = gl.glGetUniformLocation(shaderProgram, "view");
     }
 
-    private void createBuffers(GL2GL3 gl) {
-        // create and fill vertex buffer data
+    void createBuffers(GL2GL3 gl) {
         float[] vertexBufferData = {
-                -1, -1,
-                1, 0,
-                0, 1
+                -1, -1, 	0.7f, 0, 0,
+                1,  0,		0, 0.7f, 0,
+                0,  1,		0, 0, 0.7f
         };
-        // create buffer required for sending data to a native library
-        FloatBuffer vertexBufferBuffer = Buffers
-                .newDirectFloatBuffer(vertexBufferData);
+        int[] indexBufferData = { 0, 1, 2 };
 
-        gl.glGenBuffers(1, vertexBuffer, 0);
-        gl.glBindBuffer(GL2GL3.GL_ARRAY_BUFFER, vertexBuffer[0]);
-        gl.glBufferData(GL2GL3.GL_ARRAY_BUFFER, vertexBufferData.length * 4,
-                vertexBufferBuffer, GL2GL3.GL_STATIC_DRAW);
+        // vertex binding description, concise version
+        OGLBuffers.Attrib[] attributes = {
+                new OGLBuffers.Attrib("inPosition", 2), // 2 floats
+                new OGLBuffers.Attrib("inColor", 3) // 3 floats
+        };
+        buffers = new OGLBuffers(gl, vertexBufferData, attributes,
+                indexBufferData);
+        // the concise version requires attributes to be in this order within
+        // vertex and to be exactly all floats within vertex
 
-        // create and fill index buffer data (element buffer in OpenGL terminology)
-        short[] indexBufferData = { 0, 1, 2 };
-
-        // create buffer required for sending data to a native library
-        ShortBuffer indexBufferBuffer = Buffers
-                .newDirectShortBuffer(indexBufferData);
-
-        gl.glGenBuffers(1, indexBuffer, 0);
-        gl.glBindBuffer(GL2GL3.GL_ELEMENT_ARRAY_BUFFER, indexBuffer[0]);
-        gl.glBufferData(GL2GL3.GL_ELEMENT_ARRAY_BUFFER,
-                indexBufferData.length * 2, indexBufferBuffer,
-                GL2GL3.GL_STATIC_DRAW);
+/*		full version for the case that some floats of the vertex are to be ignored
+ * 		(in this case it is equivalent to the concise version):
+ 		OGLBuffers.Attrib[] attributes = {
+				new OGLBuffers.Attrib("inPosition", 2, 0), // 2 floats, at 0 floats from vertex start
+				new OGLBuffers.Attrib("inColor", 3, 2) }; // 3 floats, at 2 floats from vertex start
+		buffers = new OGLBuffers(gl, vertexBufferData, 5, // 5 floats altogether in a vertex
+				attributes, indexBufferData);
+*/
     }
 
-    private void createShaders(GL2GL3 gl) {
-        String shaderVertSrc[] = {
-                "#version 150\n",
-                "in vec2 inPosition;", // input from the vertex buffer
-                "void main() {",
-                "	vec2 position = inPosition;",
-                "   position.x += 0.1;",
-                " 	gl_Position = vec4(position, 0.0, 1.0);",
-                "}"
-        };
-        // gl_Position - built-in vertex shader output variable containing
-        // vertex position before w-clipping and dehomogenization, must be
-        // filled
-
-        String shaderFragSrc[] = {
-                "#version 150\n",
-                "out vec4 outColor;", // output from the fragment shader
-                "void main() {",
-                " 	outColor = vec4(0.5,0.1,0.8, 1.0);",
-                "}"
-        };
-
-        // vertex shader
-        int vs = gl.glCreateShader(GL2GL3.GL_VERTEX_SHADER);
-        gl.glShaderSource(vs, shaderVertSrc.length, shaderVertSrc,
-                (int[]) null, 0);
-        gl.glCompileShader(vs);
-        System.out.println("Compile VS error: " + checkLogInfo(gl, vs, GL2GL3.GL_COMPILE_STATUS));
-
-        // fragment shader
-        int fs = gl.glCreateShader(GL2GL3.GL_FRAGMENT_SHADER);
-        gl.glShaderSource(fs, shaderFragSrc.length, shaderFragSrc,
-                (int[]) null, 0);
-        gl.glCompileShader(fs);
-        System.out.println("Compile FS error: " + checkLogInfo(gl, fs, GL2GL3.GL_COMPILE_STATUS));
-
-        // link program
-        shaderProgram = gl.glCreateProgram();
-        gl.glAttachShader(shaderProgram, vs);
-        gl.glAttachShader(shaderProgram, fs);
-        gl.glLinkProgram(shaderProgram);
-        System.out.println("Link error: " + checkLogInfo(gl, shaderProgram, GL2GL3.GL_LINK_STATUS));
-
-        if (vs > 0) gl.glDetachShader(shaderProgram, vs);
-        if (fs > 0) gl.glDetachShader(shaderProgram, fs);
-        if (vs > 0) gl.glDeleteShader(vs);
-        if (fs > 0) gl.glDeleteShader(fs);
-
-    }
 
     @Override
     public void display(GLAutoDrawable glDrawable) {
         GL2GL3 gl = glDrawable.getGL().getGL2GL3();
+
         gl.glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         gl.glClear(GL2GL3.GL_COLOR_BUFFER_BIT | GL2GL3.GL_DEPTH_BUFFER_BIT);
 
         // set the current shader to be used, could have been done only once (in
         // init) in this sample (only one shader used)
         gl.glUseProgram(shaderProgram);
-        // to use the default shader of the "fixed pipeline", call
-        // gl.glUseProgram(0);
+        time += 0.1;
+        //gl.glUniform1f(locTime, time); // correct shader must be set before this
+        gl.glUniformMatrix4fv(locView, 1, false, camera.getViewMatrix().floatArray(), 0);
+        gl.glUniformMatrix4fv(locProj, 1, false, proj.floatArray(), 0);
 
+        // bind and draw
+        buffers.draw(GL2GL3.GL_TRIANGLES, shaderProgram);
 
-        // bind the vertex and index buffer to shader, could have been done only
-        // once (in init) in this sample (only one geometry used)
-        bindBuffers(gl);
-        // draw
-        gl.glDrawElements(GL2GL3.GL_TRIANGLES, 3, GL2GL3.GL_UNSIGNED_SHORT, 0);
+        String text = new String(this.getClass().getName());
+        textRenderer.drawStr2D(3, height - 20, text);
+        textRenderer.drawStr2D(width - 90, 3, " (c) PGRF UHK");
 
-    }
-
-    private void bindBuffers(GL2GL3 gl) {
-        // internal OpenGL ID of a vertex shader input variable
-        int locPosition = gl.glGetAttribLocation(0, "inPosition");
-
-        gl.glBindBuffer(GL2GL3.GL_ARRAY_BUFFER, vertexBuffer[0]);
-        // bind the shader variable to specific part of vertex data (attribute)
-        // - describe how many components of which type correspond to it in the
-        // data, how large is one vertex (its stride in bytes) and at which byte
-        // of the vertex the first component starts
-        // 2 components, of type float, do not normalize (convert to [0,1]),
-        // vertex of 8 bytes, start at the beginning (byte 0)
-        gl.glVertexAttribPointer(locPosition, 2, GL2GL3.GL_FLOAT, false, 8, 0);
-        gl.glEnableVertexAttribArray(locPosition);
-        gl.glBindBuffer(GL2GL3.GL_ELEMENT_ARRAY_BUFFER, indexBuffer[0]);
     }
 
     @Override
-    public void dispose(GLAutoDrawable glDrawable) {
-        GL2GL3 gl = glDrawable.getGL().getGL2GL3();
-        gl.glDeleteProgram(shaderProgram);
-    }
-
-    @Override
-    public void reshape(GLAutoDrawable glAutoDrawable, int x, int y, int width, int height) {
+    public void reshape(GLAutoDrawable drawable, int x, int y, int width,
+                        int height) {
         this.width = width;
         this.height = height;
-    }
-
-    @Override
-    public void keyTyped(KeyEvent e) {
-    }
-
-    @Override
-    public void keyPressed(KeyEvent e) {
-    }
-
-    @Override
-    public void keyReleased(KeyEvent e) {
+        proj = new Mat4PerspRH(Math.PI / 4, height / (double) width, 0.01, 1000.0);
+        textRenderer.updateSize(width, height);
     }
 
     @Override
     public void mouseClicked(MouseEvent e) {
-    }
-
-    @Override
-    public void mousePressed(MouseEvent e) {
-    }
-
-    @Override
-    public void mouseReleased(MouseEvent e) {
     }
 
     @Override
@@ -206,6 +157,14 @@ public class Renderer implements GLEventListener, MouseListener, MouseMotionList
     }
 
     @Override
+    public void mousePressed(MouseEvent e) {
+    }
+
+    @Override
+    public void mouseReleased(MouseEvent e) {
+    }
+
+    @Override
     public void mouseDragged(MouseEvent e) {
     }
 
@@ -213,50 +172,22 @@ public class Renderer implements GLEventListener, MouseListener, MouseMotionList
     public void mouseMoved(MouseEvent e) {
     }
 
-    static private String checkLogInfo(GL2GL3 gl, int programObject, int mode) {
-        switch (mode) {
-            case GL2GL3.GL_COMPILE_STATUS:
-                return checkLogInfoShader(gl, programObject, mode);
-            case GL2GL3.GL_LINK_STATUS:
-            case GL2GL3.GL_VALIDATE_STATUS:
-                return checkLogInfoProgram(gl, programObject, mode);
-            default:
-                return "Unsupported mode.";
-        }
+    @Override
+    public void keyPressed(KeyEvent e) {
     }
 
-    static private String checkLogInfoShader(GL2GL3 gl, int programObject, int mode) {
-        int[] error = new int[] { -1 };
-        gl.glGetShaderiv(programObject, mode, error, 0);
-        if (error[0] != GL2GL3.GL_TRUE) {
-            int[] len = new int[1];
-            gl.glGetShaderiv(programObject, GL2GL3.GL_INFO_LOG_LENGTH, len, 0);
-            if (len[0] == 0) {
-                return null;
-            }
-            byte[] errorMessage = new byte[len[0]];
-            gl.glGetShaderInfoLog(programObject, len[0], len, 0, errorMessage,
-                    0);
-            return new String(errorMessage, 0, len[0]);
-        }
-        return null;
+    @Override
+    public void keyReleased(KeyEvent e) {
     }
 
-    static private String checkLogInfoProgram(GL2GL3 gl, int programObject, int mode) {
-        int[] error = new int[] { -1 };
-        gl.glGetProgramiv(programObject, mode, error, 0);
-        if (error[0] != GL2GL3.GL_TRUE) {
-            int[] len = new int[1];
-            gl.glGetProgramiv(programObject, GL2GL3.GL_INFO_LOG_LENGTH, len, 0);
-            if (len[0] == 0) {
-                return null;
-            }
-            byte[] errorMessage = new byte[len[0]];
-            gl.glGetProgramInfoLog(programObject, len[0], len, 0, errorMessage,
-                    0);
-            return new String(errorMessage, 0, len[0]);
-        }
-        return null;
+    @Override
+    public void keyTyped(KeyEvent e) {
+    }
+
+    @Override
+    public void dispose(GLAutoDrawable glDrawable) {
+        GL2GL3 gl = glDrawable.getGL().getGL2GL3();
+        gl.glDeleteProgram(shaderProgram);
     }
 
 }
