@@ -38,7 +38,10 @@ public class GridRenderer {
             }
         }
 
-        OGLBuffers.Attrib[] attributes = {new OGLBuffers.Attrib("inPosition", 2)};
+        OGLBuffers.Attrib[] attributes = {
+            new OGLBuffers.Attrib("inPosition", 2),
+            new OGLBuffers.Attrib("inColor", 3)
+        };
 
         return new OGLBuffers(gl, vb, attributes, ib);
     }
