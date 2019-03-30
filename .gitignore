@@ -5,3 +5,4 @@ bin
 /joglApp.jar
 .idea
 *.iml
+out
