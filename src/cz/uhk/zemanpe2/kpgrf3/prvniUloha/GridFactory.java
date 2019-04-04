@@ -3,10 +3,9 @@ package cz.uhk.zemanpe2.kpgrf3.prvniUloha;
 import com.jogamp.opengl.GL2GL3;
 import oglutils.OGLBuffers;
 
-public class GridRenderer {
+public class GridFactory {
 
     /**
-     *
      * @param gl
      * @param m počet vrcholů v řádku
      * @param n počet vrcholů ve sloupci
@@ -16,7 +15,7 @@ public class GridRenderer {
         float[] vb = new float[m * n * 2];
         int index = 0;
         for (int j = 0; j < n; j++) {
-            float y = j / (float) (n-1);
+            float y = j / (float) (n - 1);
             for (int i = 0; i < m; i++) {
                 float x = i / (float) (m - 1);
                 vb[index++] = x;
@@ -39,8 +38,7 @@ public class GridRenderer {
         }
 
         OGLBuffers.Attrib[] attributes = {
-            new OGLBuffers.Attrib("inPosition", 2),
-            new OGLBuffers.Attrib("inColor", 3)
+            new OGLBuffers.Attrib("inPosition", 2)
         };
 
         return new OGLBuffers(gl, vb, attributes, ib);

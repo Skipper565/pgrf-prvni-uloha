@@ -40,11 +40,11 @@ public class Renderer implements GLEventListener, MouseListener,
     OGLBuffers buffers;
     OGLTextRenderer textRenderer;
 
-    int shaderProgram, locTime, locProj, locView;
+    private int shaderProgram, locProj, locView;
 
-    float time = 0;
     private Mat4 proj;
     private Camera camera;
+    private int mx, my;
 
     @Override
     public void init(GLAutoDrawable glDrawable) {
@@ -73,9 +73,14 @@ public class Renderer implements GLEventListener, MouseListener,
 
         //createBuffers(gl);
 
-        buffers = GridRenderer.generateGrid(gl, 100, 100);
+        buffers = GridFactory.generateGrid(gl, 100, 100);
 
-        camera = new Camera().withPosition(new Vec3D(0, 0, 0)).addAzimuth(5 / 4. * Math.PI).addZenith(-1 / 5. * Math.PI).withFirstPerson(false).withRadius(5);
+        camera = new Camera()
+                .withPosition(new Vec3D(0, 0, 0))
+                .addAzimuth(5 / 4. * Math.PI)
+                .addZenith(-1 / 5. * Math.PI)
+                .withFirstPerson(false)
+                .withRadius(5);
 
         //locTime = gl.glGetUniformLocation(shaderProgram, "time");
         locProj = gl.glGetUniformLocation(shaderProgram, "proj");
@@ -121,7 +126,6 @@ public class Renderer implements GLEventListener, MouseListener,
         // set the current shader to be used, could have been done only once (in
         // init) in this sample (only one shader used)
         gl.glUseProgram(shaderProgram);
-        time += 0.1;
         //gl.glUniform1f(locTime, time); // correct shader must be set before this
         gl.glUniformMatrix4fv(locView, 1, false, camera.getViewMatrix().floatArray(), 0);
         gl.glUniformMatrix4fv(locProj, 1, false, proj.floatArray(), 0);
@@ -166,6 +170,10 @@ public class Renderer implements GLEventListener, MouseListener,
 
     @Override
     public void mouseDragged(MouseEvent e) {
+        camera = camera.addAzimuth(Math.PI * (mx - e.getX()) / width);
+        camera = camera.addZenith(Math.PI * (e.getY() - my) / width);
+        mx = e.getX();
+        my = e.getY();
     }
 
     @Override
