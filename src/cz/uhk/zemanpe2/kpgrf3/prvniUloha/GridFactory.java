@@ -3,7 +3,7 @@ package cz.uhk.zemanpe2.kpgrf3.prvniUloha;
 import com.jogamp.opengl.GL2GL3;
 import oglutils.OGLBuffers;
 
-public class GridFactory {
+class GridFactory {
 
     /**
      * @param gl
@@ -11,7 +11,7 @@ public class GridFactory {
      * @param n počet vrcholů ve sloupci
      * @return OGLBuffers
      */
-    public static OGLBuffers generateGrid(GL2GL3 gl, int m, int n) {
+    static OGLBuffers generateGrid(GL2GL3 gl, int m, int n) {
         float[] vb = new float[m * n * 2];
         int index = 0;
         for (int j = 0; j < n; j++) {
