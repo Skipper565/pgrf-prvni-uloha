@@ -4,6 +4,7 @@ import com.jogamp.opengl.GL2GL3;
 import com.jogamp.opengl.GLAutoDrawable;
 import com.jogamp.opengl.GLEventListener;
 
+import com.jogamp.opengl.awt.GLCanvas;
 import oglutils.*;
 import transforms.*;
 
@@ -17,10 +18,15 @@ import java.awt.event.KeyEvent;
 public class Renderer implements GLEventListener, MouseListener,
         MouseMotionListener, KeyListener {
 
+    private GLCanvas canvas;
+    private Cursor defaultCursor;
+
     private int width, height;
     private boolean showLines = false;
     private boolean ortho = false;
     private boolean strip = false;
+    private boolean mouseLook = false;
+    private boolean circle = true;
     private int setting = 1;
 
     private OGLBuffers buffers;
@@ -40,6 +46,11 @@ public class Renderer implements GLEventListener, MouseListener,
     private Robot robot;
     private Color color;
 
+    Renderer(GLCanvas canvas) {
+        this.canvas = canvas;
+        this.defaultCursor = canvas.getCursor();
+    }
+
     @Override
     public void init(GLAutoDrawable glDrawable) {
         GL2GL3 gl = glDrawable.getGL().getGL2GL3();
@@ -57,13 +68,13 @@ public class Renderer implements GLEventListener, MouseListener,
         buffers = GridFactory.generateGrid(gl, 100, 100);
 
         camera = new Camera()
-                .withPosition(new Vec3D(0, 0, 0))
+                .withPosition(new Vec3D(0))
                 .addAzimuth(5 / 4. * Math.PI)
                 .addZenith(-1 / 5. * Math.PI)
                 .withFirstPerson(false)
                 .withRadius(5);
         cameraLight = new Camera()
-                .withPosition(new Vec3D(0, 0, 0))
+                .withPosition(new Vec3D(0))
                 .addAzimuth(5 / 4. * Math.PI)
                 .addZenith(-1 / 5. * Math.PI)
                 .withFirstPerson(false)
@@ -100,6 +111,10 @@ public class Renderer implements GLEventListener, MouseListener,
         time += 0.1;
         cameraLight = cameraLight.addAzimuth(0.01);
 
+        if (!mouseLook && circle) {
+            camera = camera.addAzimuth(0.01);
+        }
+
         renderLightShader(gl);
         renderShader(gl);
 
@@ -108,11 +123,14 @@ public class Renderer implements GLEventListener, MouseListener,
         textureViewer.view(renderTarget.getDepthTexture(), -1, 0, 0.5);
 
         textRenderer.drawStr2D(3, height - 20, text);
-        textRenderer.drawStr2D(width - 50, 51, "T - Strip");
-        textRenderer.drawStr2D(width - 50, 39, "O - Ortho");
-        textRenderer.drawStr2D(width - 50, 27, "L - Lines");
-        textRenderer.drawStr2D(width - 60, 15, "1,2,3,4,5,6");
-        textRenderer.drawStr2D(width - 90, 3, " (c) PGRF UHK");
+        textRenderer.drawStr2D(width - 43, 87, "T - Strip");
+        textRenderer.drawStr2D(width - 49, 75, "L - Lines");
+        textRenderer.drawStr2D(width - 50, 63, "O - Ortho");
+        textRenderer.drawStr2D(width - 56, 51, "ESC - Exit");
+        textRenderer.drawStr2D(width - 77, 39, "C - Stop circle");
+        textRenderer.drawStr2D(width - 84, 27, "M - Mouse look");
+        textRenderer.drawStr2D(width - 146, 15, "1,2,3,4,5,6 - Shader switch");
+        textRenderer.drawStr2D(width - 168, 3, "Bc. Petr Zeman (c) PGRF UHK");
     }
 
     private void renderLightShader(GL2GL3 gl) {
@@ -208,14 +226,26 @@ public class Renderer implements GLEventListener, MouseListener,
 
     @Override
     public void mouseDragged(MouseEvent e) {
-        camera = camera.addAzimuth(Math.PI * (mx - e.getX()) / width);
-        camera = camera.addZenith(Math.PI * (e.getY() - my) / width);
+        if (!mouseLook) {
+            camera = camera.addAzimuth(Math.PI * (mx - e.getX()) / width);
+            camera = camera.addZenith(Math.PI * (e.getY() - my) / width);
+        }
+
         mx = e.getX();
         my = e.getY();
     }
 
     @Override
     public void mouseMoved(MouseEvent e) {
+        if (mouseLook) {
+            double azimuth = width / 2 - e.getXOnScreen();
+            camera = camera.addAzimuth(azimuth * 0.01);
+
+            double zenith = height / 2 - e.getYOnScreen();
+            camera = camera.addZenith(zenith * 0.01);
+            robot.mouseMove(width / 2, height / 2);
+        }
+
         color = robot.getPixelColor(e.getX(), e.getY());
         String colorText = "Red: " + color.getRed() +
                 "Green: " + color.getGreen() +
@@ -265,6 +295,14 @@ public class Renderer implements GLEventListener, MouseListener,
             case KeyEvent.VK_T:
                 strip = !strip;
                 break;
+            case KeyEvent.VK_M:
+                toggleMouseLook();
+                break;
+            case KeyEvent.VK_C:
+                if (!mouseLook) {
+                    circle = !circle;
+                }
+                break;
             case KeyEvent.VK_1:
             case KeyEvent.VK_NUMPAD1:
                 setting = 1;
@@ -313,6 +351,21 @@ public class Renderer implements GLEventListener, MouseListener,
         } else {
             proj = new Mat4PerspRH(Math.PI / 3, height / (double) width, 1, 20);
         }
+    }
+
+    private void toggleMouseLook() {
+        mouseLook = !mouseLook;
+        Cursor cursor = defaultCursor;
+        if (mouseLook) {
+            camera = camera.backward(5).withFirstPerson(true);
+            Toolkit tk = Toolkit.getDefaultToolkit();
+            cursor = tk.createCustomCursor(tk.getImage(""), new Point(), "trans");
+        } else {
+            camera = camera.forward(5).withFirstPerson(false);
+        }
+
+        canvas.setCursor(cursor);
+        robot.mouseMove(width / 2, height / 2);
     }
 
 }
